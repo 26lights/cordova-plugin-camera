@@ -87,6 +87,8 @@ typedef NSUInteger CDVMediaType;
 {}
 
 @property (strong) CDVCameraPicker* pickerController;
+@property (strong) UIView* cameraOverlay;
+@property (strong) UIView* previewOverlay;
 @property (strong) NSMutableDictionary *metadata;
 @property (strong, nonatomic) CLLocationManager *locationManager;
 @property (strong) NSData* data;

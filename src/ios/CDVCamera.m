@@ -104,7 +104,7 @@ static NSString* toBase64(NSData* data) {
     org_apache_cordova_validArrowDirections = [[NSSet alloc] initWithObjects:[NSNumber numberWithInt:UIPopoverArrowDirectionUp], [NSNumber numberWithInt:UIPopoverArrowDirectionDown], [NSNumber numberWithInt:UIPopoverArrowDirectionLeft], [NSNumber numberWithInt:UIPopoverArrowDirectionRight], [NSNumber numberWithInt:UIPopoverArrowDirectionAny], nil];
 }
 
-@synthesize hasPendingOperation, pickerController, locationManager;
+@synthesize hasPendingOperation, pickerController, cameraOverlay, previewOverlay, locationManager;
 
 - (NSURL*) urlTransformer:(NSURL*)url
 {
@@ -138,6 +138,9 @@ static NSString* toBase64(NSData* data) {
 
 - (void)takePicture:(CDVInvokedUrlCommand*)command
 {
+    
+    NSLog(@ "Using Custom Camera Plugin");
+    
     self.hasPendingOperation = YES;
     
     __weak CDVCamera* weakSelf = self;
@@ -147,7 +150,7 @@ static NSString* toBase64(NSData* data) {
         CDVPictureOptions* pictureOptions = [CDVPictureOptions createFromTakePictureArguments:command];
         pictureOptions.popoverSupported = [weakSelf popoverSupported];
         pictureOptions.usesGeolocation = [weakSelf usesGeolocation];
-        pictureOptions.cropToSize = NO;
+        pictureOptions.cropToSize = YES;
         
         BOOL hasCamera = [UIImagePickerController isSourceTypeAvailable:pictureOptions.sourceType];
         if (!hasCamera) {
@@ -190,6 +193,14 @@ static NSString* toBase64(NSData* data) {
         // we need to capture this state for memory warnings that dealloc this object
         cameraPicker.webView = weakSelf.webView;
         
+        // Prepare overlays if this is camera mode
+        if (pictureOptions.sourceType == UIImagePickerControllerSourceTypeCamera) {
+            weakSelf.cameraOverlay = [self buildCameraOverlay:cameraPicker fromPictureOptions:pictureOptions];
+            weakSelf.previewOverlay = [self buildPreviewOverlay:cameraPicker fromPictureOptions:pictureOptions];
+            [self useCameraOverlay];
+            [self addPhotoObservers];
+        }
+        
         // Perform UI operations on the main thread
         dispatch_async(dispatch_get_main_queue(), ^{
             // If a popover is already open, close it; we only want one at a time.
@@ -212,6 +223,92 @@ static NSString* toBase64(NSData* data) {
             }
         });
     }];
+}
+
+-(UIView *) buildCameraOverlay:(CDVCameraPicker *)cameraPicker fromPictureOptions:(CDVPictureOptions*) pictureOptions {
+    return [self buildOverlayFrom:cameraPicker.navigationBar.bounds.size.height
+                       withPicker:cameraPicker
+               fromPictureOptions:pictureOptions];
+}
+
+-(UIView *) buildPreviewOverlay:(CDVCameraPicker *)cameraPicker fromPictureOptions:(CDVPictureOptions*) pictureOptions {
+    
+    CGRect cameraPickerBounds = cameraPicker.view.bounds;
+    CGFloat cameraWidth = cameraPickerBounds.size.width;
+    CGFloat cameraHeight = cameraWidth * 4 / 3; // Add two pixels to avoid approx. errors
+    CGFloat topBarHeight = (cameraPickerBounds.size.height - cameraHeight) / 2;
+    
+    return [self buildOverlayFrom:topBarHeight
+                       withPicker:cameraPicker
+               fromPictureOptions:pictureOptions];
+    
+}
+
+-(UIView *) buildOverlayFrom:(CGFloat)startY withPicker:(CDVCameraPicker *)cameraPicker fromPictureOptions:(CDVPictureOptions*) pictureOptions {
+    UIView *overlayView = nil;
+    if ((pictureOptions.targetSize.width > 0) && (pictureOptions.targetSize.height > 0)) {
+        
+        CGRect cameraPickerBounds = cameraPicker.view.bounds;
+        
+        // Default camera aspect ratio is 4:3 so this should work on all devices...
+        CGFloat cameraWidth = cameraPickerBounds.size.width;
+        CGFloat cameraHeight = (cameraWidth * 4 / 3) + 2; // Add two pixels to avoid approx. errors
+        
+        // Create the camera overlay
+        CGRect overlayBounds = CGRectMake(0, startY,
+                                          cameraPickerBounds.size.width, cameraHeight);
+        overlayView = [[UIView alloc] initWithFrame:overlayBounds];
+        overlayView.opaque = NO;
+        overlayView.clipsToBounds = YES;
+        
+        // Compute target Camera Height
+        CGFloat targetCameraHeight = cameraWidth * (pictureOptions.targetSize.height / pictureOptions.targetSize.width);
+        NSLog(@"Target Camera Height is %f", targetCameraHeight);
+        CGFloat barHeight = (cameraHeight - targetCameraHeight) / 2;
+        
+        if (barHeight > 0) {
+            //            UIColor *barColor = [UIColor colorWithRed:255 green:0 blue:0 alpha:0.7];
+            UIColor *barColor = [UIColor colorWithWhite:0 alpha:1.0];
+            
+            // Add the top black bar to the overlayView
+            UIView *topBarView = [[UIView alloc] initWithFrame:CGRectMake(0, 0,
+                                                                          cameraWidth, barHeight)];
+            topBarView.backgroundColor = barColor;
+            [overlayView addSubview:topBarView];
+            
+            // Add the bottom black bar to the overlayView
+            UIView *bottomBarView = [[UIView alloc] initWithFrame:CGRectMake(0, cameraHeight - barHeight,
+                                                                             cameraWidth, barHeight)];
+            bottomBarView.backgroundColor = barColor;
+            [overlayView addSubview:bottomBarView];
+        }
+    }
+    
+    return overlayView;
+    
+}
+
+- (void) addPhotoObservers {
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(usePreviewOverlay) name:@"_UIImagePickerControllerUserDidCaptureItem" object:nil ];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(useCameraOverlay) name:@"_UIImagePickerControllerUserDidRejectItem" object:nil ];
+}
+
+- (void) removePhotoObservers {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+-(void) useCameraOverlay {
+    if (self.pickerController) {
+        NSLog(@"Adding camera overlay");
+        self.pickerController.cameraOverlayView = self.cameraOverlay;
+    }
+}
+
+-(void) usePreviewOverlay {
+    if (self.pickerController) {
+        NSLog(@"Adding preview overlay");
+        self.pickerController.cameraOverlayView = self.previewOverlay;
+    }
 }
 
 // Delegate for camera permission UIAlertView
@@ -421,8 +518,10 @@ static NSString* toBase64(NSData* data) {
     if ((options.targetSize.width > 0) && (options.targetSize.height > 0)) {
         // if cropToSize, resize image and crop to target size, otherwise resize to fit target without cropping
         if (options.cropToSize) {
+            NSLog(@"Scale/Crop image");
             scaledImage = [image imageByScalingAndCroppingForSize:options.targetSize];
         } else {
+            NSLog(@"Scale image");
             scaledImage = [image imageByScalingNotCroppingForSize:options.targetSize];
         }
     }

@@ -99,6 +99,16 @@ static NSString* toBase64(NSData* data) {
 
 @implementation CDVCamera
 
+
+// iPhone 4 height = 480px (960)
+CGFloat IPHONE_4 = 480;
+// iPhone 5 height = 568px (1136)
+CGFloat IPHONE_5 = 568;
+// iPhone 6 height = 667px (1334)
+CGFloat IPHONE_6 = 667;
+// iPhone 6+ height = 960px (1920)
+CGFloat IPHONE_6p = 960;
+
 + (void)initialize
 {
     org_apache_cordova_validArrowDirections = [[NSSet alloc] initWithObjects:[NSNumber numberWithInt:UIPopoverArrowDirectionUp], [NSNumber numberWithInt:UIPopoverArrowDirectionDown], [NSNumber numberWithInt:UIPopoverArrowDirectionLeft], [NSNumber numberWithInt:UIPopoverArrowDirectionRight], [NSNumber numberWithInt:UIPopoverArrowDirectionAny], nil];
@@ -136,6 +146,11 @@ static NSString* toBase64(NSData* data) {
            (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad);
 }
 
+- (BOOL)shouldCrop:(CDVCameraPicker *)cameraPicker
+{
+    return cameraPicker.view.bounds.size.height >= IPHONE_5;
+}
+
 - (void)takePicture:(CDVInvokedUrlCommand*)command
 {
     
@@ -150,7 +165,6 @@ static NSString* toBase64(NSData* data) {
         CDVPictureOptions* pictureOptions = [CDVPictureOptions createFromTakePictureArguments:command];
         pictureOptions.popoverSupported = [weakSelf popoverSupported];
         pictureOptions.usesGeolocation = [weakSelf usesGeolocation];
-        pictureOptions.cropToSize = YES;
         
         BOOL hasCamera = [UIImagePickerController isSourceTypeAvailable:pictureOptions.sourceType];
         if (!hasCamera) {
@@ -187,6 +201,7 @@ static NSString* toBase64(NSData* data) {
 
         CDVCameraPicker* cameraPicker = [CDVCameraPicker createFromPictureOptions:pictureOptions];
         weakSelf.pickerController = cameraPicker;
+        pictureOptions.cropToSize = [self shouldCrop:cameraPicker];
         
         cameraPicker.delegate = weakSelf;
         cameraPicker.callbackId = command.callbackId;
@@ -226,12 +241,31 @@ static NSString* toBase64(NSData* data) {
 }
 
 -(UIView *) buildCameraOverlay:(CDVCameraPicker *)cameraPicker fromPictureOptions:(CDVPictureOptions*) pictureOptions {
-    return [self buildOverlayFrom:cameraPicker.navigationBar.bounds.size.height
+    
+    if (!pictureOptions.cropToSize) {
+        return nil;
+    }
+    
+    NSDictionary *navbarSizes = @{
+                                 [NSNumber numberWithFloat: IPHONE_5]: [NSNumber numberWithFloat: 40],
+                                 [NSNumber numberWithFloat: IPHONE_6]: [NSNumber numberWithFloat: 44],
+                                 [NSNumber numberWithFloat: IPHONE_6p]: [NSNumber numberWithFloat: 44]
+                                 };
+    
+    CGFloat screenHeight = cameraPicker.view.bounds.size.height;
+    CGFloat navbarSize = [[navbarSizes objectForKey:[NSNumber numberWithFloat:screenHeight]] floatValue];
+    
+    return [self buildOverlayFrom: navbarSize
                        withPicker:cameraPicker
                fromPictureOptions:pictureOptions];
+    
 }
 
 -(UIView *) buildPreviewOverlay:(CDVCameraPicker *)cameraPicker fromPictureOptions:(CDVPictureOptions*) pictureOptions {
+    
+    if (!pictureOptions.cropToSize) {
+        return nil;
+    }
     
     CGRect cameraPickerBounds = cameraPicker.view.bounds;
     CGFloat cameraWidth = cameraPickerBounds.size.width;
@@ -267,8 +301,8 @@ static NSString* toBase64(NSData* data) {
         CGFloat barHeight = (cameraHeight - targetCameraHeight) / 2;
         
         if (barHeight > 0) {
-            //            UIColor *barColor = [UIColor colorWithRed:255 green:0 blue:0 alpha:0.7];
-            UIColor *barColor = [UIColor colorWithWhite:0 alpha:1.0];
+            // UIColor *barColor = [UIColor colorWithRed:255 green:0 blue:0 alpha:0.7];
+           UIColor *barColor = [UIColor colorWithWhite:0 alpha:1.0];
             
             // Add the top black bar to the overlayView
             UIView *topBarView = [[UIView alloc] initWithFrame:CGRectMake(0, 0,

@@ -62,6 +62,8 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PermissionInfo;
 
+import com.desmond.squarecamera.CameraActivity;
+
 /**
  * This class launches the camera view, allows the user to take a picture, closes the camera view,
  * and returns the captured image.  When the camera view is closed, the screen displayed before
@@ -277,7 +279,9 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
         this.numPics = queryImgDB(whichContentStore()).getCount();
 
         // Let's use the intent and see what happens
-        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        Intent intent = (this.targetHeight > 0 && this.targetHeight == this.targetWidth) ?
+                new Intent(this.cordova.getActivity(), CameraActivity.class) :
+                new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
 
         // Specify file so that large image is captured and returned
         File photo = createCaptureFile(encodingType);
@@ -449,9 +453,15 @@ public class CameraLauncher extends CordovaPlugin implements MediaScannerConnect
 
         // Create an ExifHelper to save the exif data that is lost during compression
         ExifHelper exif = new ExifHelper();
-        String sourcePath = (this.allowEdit && this.croppedUri != null) ?
-            FileHelper.stripFileProtocol(this.croppedUri.toString()) :
-            FileHelper.stripFileProtocol(this.imageUri.toString());
+        String sourcePath = null;
+        if (intent != null) {
+            sourcePath = intent.getDataString();
+        }
+        if (sourcePath == null) {
+            sourcePath = (this.allowEdit && this.croppedUri != null) ?
+                    FileHelper.stripFileProtocol(this.croppedUri.toString()) :
+                    FileHelper.stripFileProtocol(this.imageUri.toString());
+        }
 
         if (this.encodingType == JPEG) {
             try {

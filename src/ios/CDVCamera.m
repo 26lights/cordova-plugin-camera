@@ -107,7 +107,7 @@ CGFloat IPHONE_5 = 568;
 // iPhone 6 height = 667px (1334)
 CGFloat IPHONE_6 = 667;
 // iPhone 6+ height = 960px (1920)
-CGFloat IPHONE_6p = 960;
+CGFloat IPHONE_6p = 736;
 
 + (void)initialize
 {
@@ -301,7 +301,7 @@ CGFloat IPHONE_6p = 960;
         CGFloat barHeight = (cameraHeight - targetCameraHeight) / 2;
         
         if (barHeight > 0) {
-            // UIColor *barColor = [UIColor colorWithRed:255 green:0 blue:0 alpha:0.7];
+//             UIColor *barColor = [UIColor colorWithRed:255 green:0 blue:0 alpha:0.7];
            UIColor *barColor = [UIColor colorWithWhite:0 alpha:1.0];
             
             // Add the top black bar to the overlayView

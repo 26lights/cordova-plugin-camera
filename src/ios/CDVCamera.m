@@ -106,7 +106,7 @@ CGFloat IPHONE_4 = 480;
 CGFloat IPHONE_5 = 568;
 // iPhone 6 height = 667px (1334)
 CGFloat IPHONE_6 = 667;
-// iPhone 6+ height = 960px (1920)
+// iPhone 6+ height = 736px (1920)
 CGFloat IPHONE_6p = 736;
 
 + (void)initialize

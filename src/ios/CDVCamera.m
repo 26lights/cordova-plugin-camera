@@ -95,6 +95,17 @@ static NSString* toBase64(NSData* data) {
 
 @property (readwrite, assign) BOOL hasPendingOperation;
 
+
+
+struct CameraOverlayConfig
+{
+    CGFloat startY;
+    CGFloat cropBottom;
+    CGFloat cropRight;
+    CGFloat overlayAlpha;
+    BOOL withBorder;
+};
+
 @end
 
 @implementation CDVCamera
@@ -253,11 +264,18 @@ CGFloat IPHONE_6p = 736;
                                  };
     
     CGFloat screenHeight = cameraPicker.view.bounds.size.height;
-    CGFloat navbarSize = [[navbarSizes objectForKey:[NSNumber numberWithFloat:screenHeight]] floatValue];
     
-    return [self buildOverlayFrom: navbarSize
-                       withPicker:cameraPicker
-               fromPictureOptions:pictureOptions];
+    struct CameraOverlayConfig overlayConfig = [self cameraOverlayDefault];
+    overlayConfig.startY = [[navbarSizes objectForKey:[NSNumber numberWithFloat:screenHeight]] floatValue];
+    if ([self isIpad]) {
+        overlayConfig.cropRight = 102;
+        overlayConfig.withBorder = true;
+        overlayConfig.overlayAlpha = 0;
+    }
+    
+    return [self buildOverlay: overlayConfig
+                   withPicker:cameraPicker
+           fromPictureOptions:pictureOptions];
     
 }
 
@@ -272,13 +290,34 @@ CGFloat IPHONE_6p = 736;
     CGFloat cameraHeight = cameraWidth * 4 / 3; // Add two pixels to avoid approx. errors
     CGFloat topBarHeight = (cameraPickerBounds.size.height - cameraHeight) / 2;
     
-    return [self buildOverlayFrom:topBarHeight
-                       withPicker:cameraPicker
-               fromPictureOptions:pictureOptions];
+    struct CameraOverlayConfig overlayConfig = [self cameraOverlayDefault];
+    overlayConfig.startY = topBarHeight;
+    if ([self isIpad]) {
+        overlayConfig.cropBottom = 74.5;
+        overlayConfig.overlayAlpha = 0.65;
+    }
+    
+    return [self buildOverlay:overlayConfig
+                   withPicker:cameraPicker
+           fromPictureOptions:pictureOptions];
     
 }
 
--(UIView *) buildOverlayFrom:(CGFloat)startY withPicker:(CDVCameraPicker *)cameraPicker fromPictureOptions:(CDVPictureOptions*) pictureOptions {
+- (BOOL) isIpad {
+    return [UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad;
+}
+
+- (struct CameraOverlayConfig) cameraOverlayDefault {
+    struct CameraOverlayConfig overlayConfig;
+    overlayConfig.startY = 0;
+    overlayConfig.cropBottom = 0;
+    overlayConfig.cropRight = 0;
+    overlayConfig.overlayAlpha = 1.0;
+    overlayConfig.withBorder = false;
+    return overlayConfig;
+}
+
+-(UIView *) buildOverlay:(struct CameraOverlayConfig)config withPicker:(CDVCameraPicker *)cameraPicker fromPictureOptions:(CDVPictureOptions*) pictureOptions {
     UIView *overlayView = nil;
     if ((pictureOptions.targetSize.width > 0) && (pictureOptions.targetSize.height > 0)) {
         
@@ -289,8 +328,8 @@ CGFloat IPHONE_6p = 736;
         CGFloat cameraHeight = (cameraWidth * 4 / 3) + 2; // Add two pixels to avoid approx. errors
         
         // Create the camera overlay
-        CGRect overlayBounds = CGRectMake(0, startY,
-                                          cameraPickerBounds.size.width, cameraHeight);
+        CGRect overlayBounds = CGRectMake(0, config.startY,
+                                          cameraPickerBounds.size.width, cameraHeight - config.cropBottom);
         overlayView = [[UIView alloc] initWithFrame:overlayBounds];
         overlayView.opaque = NO;
         overlayView.clipsToBounds = YES;
@@ -301,20 +340,41 @@ CGFloat IPHONE_6p = 736;
         CGFloat barHeight = (cameraHeight - targetCameraHeight) / 2;
         
         if (barHeight > 0) {
-//             UIColor *barColor = [UIColor colorWithRed:255 green:0 blue:0 alpha:0.7];
-           UIColor *barColor = [UIColor colorWithWhite:0 alpha:1.0];
+            UIColor *barColor = [UIColor colorWithWhite:0 alpha:config.overlayAlpha];
             
             // Add the top black bar to the overlayView
             UIView *topBarView = [[UIView alloc] initWithFrame:CGRectMake(0, 0,
-                                                                          cameraWidth, barHeight)];
+                                                                          cameraWidth - config.cropRight, barHeight)];
             topBarView.backgroundColor = barColor;
             [overlayView addSubview:topBarView];
             
             // Add the bottom black bar to the overlayView
             UIView *bottomBarView = [[UIView alloc] initWithFrame:CGRectMake(0, cameraHeight - barHeight,
-                                                                             cameraWidth, barHeight)];
+                                                                             cameraWidth - config.cropRight, barHeight - config.cropBottom)];
             bottomBarView.backgroundColor = barColor;
             [overlayView addSubview:bottomBarView];
+            
+            if (config.withBorder) {
+                CGFloat borderWidth = 2;
+                UIColor *borderColor = [UIColor colorWithWhite:0 alpha:1.0];
+                UIView *topBorder = [[UIView alloc] initWithFrame:CGRectMake(0, barHeight - borderWidth,
+                                                                             cameraWidth, borderWidth)];
+                UIView *leftBorder = [[UIView alloc] initWithFrame:CGRectMake(0, barHeight - borderWidth,
+                                                                              borderWidth, cameraHeight - 2*barHeight + borderWidth)];
+                UIView *rightBorder = [[UIView alloc] initWithFrame:CGRectMake(cameraWidth - borderWidth, barHeight - borderWidth,
+                                                                              borderWidth, cameraHeight - 2*barHeight + borderWidth)];
+                UIView *bottomBorder = [[UIView alloc] initWithFrame:CGRectMake(0, cameraHeight - barHeight,
+                                                                                cameraWidth, borderWidth)];
+                
+                topBorder.backgroundColor = borderColor;
+                leftBorder.backgroundColor = borderColor;
+                rightBorder.backgroundColor = borderColor;
+                bottomBorder.backgroundColor = borderColor;
+                [overlayView addSubview:topBorder];
+                [overlayView addSubview:leftBorder];
+                [overlayView addSubview:rightBorder];
+                [overlayView addSubview:bottomBorder];
+            }
         }
     }
     
@@ -893,6 +953,12 @@ CGFloat IPHONE_6p = 736;
     }
     
     return cameraPicker;
+}
+
+// Disable Landscape mode.
+- (BOOL)shouldAutorotate
+{
+    return [UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPhone;
 }
 
 @end
